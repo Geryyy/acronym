@@ -1,5 +1,6 @@
 import bpy
 import mathutils
+import random
 from math import radians
 
 class Scene:
@@ -22,52 +23,79 @@ class Scene:
     def load_obj(self, path):
         bpy.ops.import_scene.obj(filepath=path)
         return bpy.context.selected_objects[0]  # Return the last imported object
+    
+    def import_dae_object(file_path):
+        bpy.ops.wm.collada_import(filepath=file_path)
+        obj = bpy.context.selected_objects[0]
+        return obj
 
-    def create_scene(self):
-        # Clear all mesh objects
-        bpy.ops.object.select_all(action='DESELECT')
-        bpy.ops.object.select_by_type(type='MESH')
+    def setup_scene(self, config):
+        bpy.ops.object.select_all(action='SELECT')
         bpy.ops.object.delete()
 
-        # Remove all objects from the default scene collection
-        for obj in bpy.context.scene.collection.objects:
-            bpy.context.scene.collection.objects.unlink(obj)
+        # # Enable GPU rendering
+        # bpy.context.scene.cycles.device = 'GPU'
+        # bpy.context.scene.render.resolution_x = config['resolution_x']
+        # bpy.context.scene.render.resolution_y = config['resolution_y']
+        # bpy.context.scene.render.image_settings.file_format = 'PNG'
 
-        # Add ground and background plane
-        bpy.ops.mesh.primitive_plane_add(size=1, enter_editmode=False, align='WORLD')
-        ground = bpy.context.active_object
-        ground.scale = (10, 10, 10)  # Scale up the ground plane
+        self.set_random_lighting(config)
+        self.set_random_camera_pose(config)
 
-        # Add texture to ground
-        img = bpy.data.images.load(self.texture_image)
-        tex = bpy.data.textures.new('ColorTex', type='IMAGE')
-        tex.image = img
-        mat = bpy.data.materials.new('TexMat')
-        mat.use_nodes = True
-        bsdf = mat.node_tree.nodes["Principled BSDF"]
-        tex_node = mat.node_tree.nodes.new('ShaderNodeTexImage')
-        tex_node.image = img
-        mat.node_tree.links.new(bsdf.inputs['Base Color'], tex_node.outputs['Color'])
-        ground.data.materials.append(mat)
+    def set_random_camera_pose(self, config):
+        # Set up the camera
+        camera_config = config['camera']
+        min_location = camera_config['location_min']
+        max_location = camera_config['location_max']
+        min_rotation = camera_config['rotation_min']
+        max_rotation = camera_config['rotation_max']
+        
+        random_location = [
+            random.uniform(min_location[0], max_location[0]),
+            random.uniform(min_location[1], max_location[1]),
+            random.uniform(min_location[2], max_location[2])
+        ]
+        
+        random_rotation = [
+            random.uniform(min_rotation[0], max_rotation[0]),
+            random.uniform(min_rotation[1], max_rotation[1]),
+            random.uniform(min_rotation[2], max_rotation[2])
+        ]
 
-        # Position the object and support
-        self.obj.location = self.object_position
-        self.obj.rotation_euler = [radians(a) for a in self.object_orientation]  # Convert to radians
-        self.support.location = (self.object_position[0], self.object_position[1], self.object_position[2]-1)  # Assuming the support is just below the object
-
-        # Position the camera
-        cam_data = bpy.data.cameras.new('camera')
-        cam = bpy.data.objects.new('camera', cam_data)
-        bpy.context.scene.collection.objects.link(cam)
+        bpy.ops.object.camera_add(location=random_location)
+        cam = bpy.context.active_object
+        cam.rotation_euler = tuple(random_rotation)
+        cam.data.type = 'PERSP'
         bpy.context.scene.camera = cam
-        cam.location = self.camera_position
-        cam.rotation_euler = self.obj.rotation_euler  # Make the camera face the object
 
-        # Add a light source
-        light_data = bpy.data.lights.new(name="light", type='POINT')
-        light = bpy.data.objects.new(name="light", object_data=light_data)
-        bpy.context.scene.collection.objects.link(light)
-        light.location = (5, -5, 5)  # Change as required
+
+    def set_random_lighting(self, config):
+        # Set up the lighting
+        lighting_config = config['lighting']
+        
+        # Deselect all objects
+        bpy.ops.object.select_all(action='DESELECT')
+
+        # Select all light objects in the current scene
+        for obj in bpy.context.scene.objects:
+            if obj.type == 'LIGHT':
+                obj.select_set(True)
+
+        # Delete selected light objects
+        bpy.ops.object.delete()
+
+        for _ in range(lighting_config['num_lights']):
+            bpy.ops.object.light_add(type=lighting_config['light_type'], align='WORLD', location=(0, 0, lighting_config['light_distance']))
+            light = bpy.context.active_object
+            light.data.color = lighting_config['light_color']
+
+            if lighting_config['light_type'] == "AREA":
+                light.data.size = lighting_config['light_size']
+
+            if lighting_config['type'] == 'random':
+                light.data.energy = random.uniform(lighting_config['light_energy_min'], lighting_config['light_energy_max'])
+            else:
+                light.data.energy = lighting_config['light_energy_min']
 
     def get_object_pose(self):
         return self.obj.matrix_world
