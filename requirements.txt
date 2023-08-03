@@ -5,3 +5,5 @@ pyrender
 matplotlib
 python-fcl
 shapely
+bpy
+mathutils
