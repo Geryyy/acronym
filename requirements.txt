@@ -7,3 +7,5 @@ python-fcl
 shapely
 bpy
 mathutils
+PyYAML
+
